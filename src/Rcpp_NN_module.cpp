@@ -156,7 +156,6 @@ public:
 	NN()
 	{
 		TEXTOUT << "NN module created, now add components.\n";
-		TEXTOUT << "(Note: NN is under development (beta).)\n";
 		m_nn.reset();
 	}
 
@@ -171,12 +170,15 @@ public:
 		layer PTR p = generate_layer(name, size, 0);
 		if(p!=NULL)
 			{
-			m_nn.add_layer(p);
-			TEXTOUT << "Topology changed:\n";
-			outline();
-			return true;
+			if(m_nn.add_layer(p))
+				{
+				TEXTOUT << "Topology changed:\n";
+				outline();
+				return true;
+				}
+			warning("Deleting orphan (?) layer");
+			delete p;
 			}
-
 		m_nn.change_is_ready_flag(false);
 		TEXTOUT << "Note: Adding layer failed.\n";
 		return false;
@@ -195,10 +197,14 @@ public:
         connection_set PTR p = generate_connection_set(type, 0);
         if(p!=NULL)
          {
-         m_nn.add_connection_set(p);
-         TEXTOUT << "Topology changed:\n";
-         outline();
-         return true;
+         if(m_nn.add_connection_set(p))
+        	{
+        	TEXTOUT << "Topology changed:\n";
+        	outline();
+        	return true;
+        	}
+         warning("Deleting orphan (?) connection set");
+         delete p;
          }
 
 		m_nn.change_is_ready_flag(false);
@@ -293,7 +299,6 @@ public:
 		return false;
 	}
 
-
 	// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 	// Trigger encode for component at specified topology index (R to Cpp index converted)
 
@@ -326,6 +331,163 @@ public:
 		return m_nn.call_component_recall_all(fwd);
 	}
 
+
+	// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+	// Encode multiple input vectors stored in data set
+
+	bool encode_dataset_unsupervised
+						  (NumericMatrix data,
+                           int pos,							// input component position
+            			   int epochs = 1000,				// training epochs (presentations of all data)
+            			   bool fwd = true					// processing direction (order) for components in NN
+						  )
+	{
+		if(data.rows()<=0)
+			{
+			error(NN_DATAST_ERR,"Cannot perform unsupervised training, dataset empty");
+			return false;
+			}
+
+		int num_training_cases=data.rows();
+
+		TEXTOUT << "Encoding (unsupervised)...\n";
+
+		for(int i=0;i<epochs;i++)
+			{
+			if(NOT m_nn.is_ready())
+				{
+				error(NN_DATAST_ERR,"Training failed");
+				return false;
+				}
+
+			for(int r=0;r<num_training_cases;r++)
+				{
+				if(NOT input_at(pos, data( r , _ ) ))
+					{
+					error(NN_INTEGR_ERR,"Training failed");
+					return false;
+					}
+				encode_all(fwd);
+				}
+			if(i%100==0) checkUserInterrupt();					// (RCpp function to check if user pressed cancel)
+			}
+
+		TEXTOUT << "Finished.\n";
+		return true;
+		}
+
+	// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+	// Encode multiple (i,j) vector pairs stored in two corresponding data sets
+
+	bool encode_datasets_supervised
+	(NumericMatrix i_data,				// data set, each row is a vector i of vector-pair (i,j)
+	 int i_pos,							// position (in topology) of component to receive i.
+	 NumericMatrix j_data,				// data set, each row is the corresponding vector j of vector-pair (i,j)
+	 int j_pos,							// position (in topology) of component to receive j.
+	 int j_destination_selector = 0,	// vector j will be sent to pe internal registers: 'input' if 0, to 'output' if 1, 'misc' if 2.
+	 int epochs = 1000,					// training epochs (presentations of all data)
+     bool fwd = true					// processing direction (order) for components in NN
+	)
+	{
+		if( (i_data.rows()<=0) OR
+            (j_data.rows()<=0) OR
+            (i_data.rows()!=j_data.rows()) )
+		{
+			error(NN_DATAST_ERR,"Cannot perform supervised training, invalid dataset size(s)");
+			return false;
+		}
+
+		int num_training_pairs=i_data.rows();
+
+		TEXTOUT << "Encoding (supervised)...\n";
+
+		for(int e=0;e<epochs;e++)
+		{
+			if(NOT m_nn.is_ready())
+			{
+				error(NN_DATAST_ERR,"Training failed");
+				return false;
+			}
+
+			bool i_data_sent = false;
+			bool j_data_sent = false;
+
+			for(int r=0;r<num_training_pairs;r++)
+			{
+				i_data_sent = input_at(i_pos, i_data( r , _ ));
+
+				if(j_destination_selector==0) j_data_sent = input_at(j_pos, j_data( r , _ ));
+				if(j_destination_selector==1) j_data_sent = set_output_at(j_pos, j_data( r , _ ));
+				if(j_destination_selector==2) j_data_sent = set_misc_values_at(j_pos, j_data( r , _ ));
+
+				if(NOT(i_data_sent AND j_data_sent))
+					{
+					error(NN_INTEGR_ERR,"Error sending the data to NN, training failed");
+					return false;
+					}
+
+				encode_all(fwd);
+			}
+			if(e%100==0) checkUserInterrupt();					// (RCpp function to check if user pressed cancel)
+		}
+
+		TEXTOUT << "Finished.\n";
+		return true;
+	}
+
+	// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+	// Decode multiple input vectors stored in data set and get output.
+
+	NumericMatrix recall_dataset(NumericMatrix data_in,
+                            	int input_pos,				// input component position
+                            	int output_pos,				// output component position
+                            	bool fwd = true				// processing direction (order) for components in NN
+                            	)
+	{
+		NumericMatrix data_out;
+
+		if((input_pos<1) OR (input_pos>size()) OR
+           (output_pos<1) OR (output_pos>size()))
+			{
+			error(NN_INTEGR_ERR,"Invalid component position");
+			return data_out;
+			}
+
+		int in_component_size = sizes()[input_pos-1];
+		int out_component_size = sizes()[output_pos-1];
+		int num_cases = data_in.rows();
+
+		if((num_cases<=0))
+			{
+			error(NN_DATAST_ERR,"Cannot recall (decode or map) empty dataset");
+			return data_out;
+			}
+
+		if((in_component_size!=data_in.cols()) OR
+           (out_component_size<=0))
+			{
+			error(NN_DATAST_ERR,"Invalid or incompatible component sizes");
+			return data_out;
+			}
+
+		data_out= NumericMatrix(num_cases,out_component_size);
+
+		for(int r=0;r<num_cases;r++)
+			{
+			if(NOT input_at(input_pos, data_in( r , _ ) ))
+				{
+				error(NN_INTEGR_ERR,"Recall failed");
+				return data_out;
+				}
+			recall_all(fwd);
+			NumericVector v_out = get_output_from(output_pos);
+			data_out( r , _ ) = v_out;                          //a lame way to interface with R. Copy result vector back to matrix. Remember, NumericMatrix stores data row-first, as R does.
+			}
+
+	return data_out;
+	}
+
+
 	// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 	// get output (R to Cpp index converted)
 
@@ -342,6 +504,14 @@ public:
 			}
 		return data_out;
 	 }
+
+	// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+	// get output (same as above)
+
+	NumericVector get_output_at(int pos)
+	{
+	return get_output_from(pos);
+	}
 
 	// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 	// get input (pe variable or connection input) (R to Cpp index converted)
@@ -395,6 +565,40 @@ public:
 	}
 
 	// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+	// Get weight for given connection.
+
+	DATA get_weight_at(int pos, int connection)
+	{
+		return m_nn.get_weight_at_component(pos-1,connection-1);
+	}
+
+	// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+	// Get weight for given connection.
+
+	bool set_weight_at(int pos, int connection, DATA value)
+	{
+		return m_nn.set_weight_at_component(pos-1,connection-1,value);
+	}
+
+	// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+	// Set "misc" register values for PEs in given component (R to Cpp index converted)
+
+	bool set_misc_values_at(int pos, NumericVector data_in)
+	{
+		double * fpdata_in  = REAL(data_in);                    // my (lame?) way to interface with R, cont.)
+		return m_nn.set_misc_at_component(pos-1,fpdata_in,data_in.length());
+	}
+
+	// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+	// Set "output" register values for PEs in given layer (R to Cpp index converted)
+
+	bool set_output_at(int pos, NumericVector data_in)
+	{
+		double * fpdata_in  = REAL(data_in);                    // my (lame?) way to interface with R, cont.)
+		return m_nn.set_output_at_component(pos-1,fpdata_in,data_in.length());
+	}
+
+	// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 	void print()
 	{
@@ -437,11 +641,19 @@ RCPP_MODULE(class_NN) {
     .method( "recall_at",       						&NN::recall_at, 	      						"Trigger recall for specified topology index" )
     .method( "encode_all",      						&NN::encode_all, 	   							"Trigger encode for entire topology" )
     .method( "recall_all",     							&NN::recall_all,	   							"Trigger recall for entire topology" )
+    .method( "encode_dataset_unsupervised",     		&NN::encode_dataset_unsupervised,	   			"Encode a data set using unsupervised training" )
+    .method( "encode_datasets_supervised",     			&NN::encode_datasets_supervised,	   			"Encode multiple (i,j) vector pairs using supervised training" )
+    .method( "recall_dataset",     						&NN::recall_dataset,				   			"Recall (i.e decode,map) a data set" )
     .method( "get_output_from",     					&NN::get_output_from,    						"Output vector from specified topology index" )
+    .method( "get_output_at",	     					&NN::get_output_at,    							"Output vector from specified topology index" )
     .method( "get_input_at",     						&NN::get_input_at,		   						"Get input (pe variable value or connection input) in specified topology index" )
     .method( "get_weights_at",     						&NN::get_weights_at,	   						"Get connection weights (connection variable value) in specified topology index" )
-    .method( "print",     								&NN::print,         							"Print internal NN state" )
-    .method( "outline",     							&NN::outline,         							"Print an outline of the NN" )
+    .method( "get_weight_at",     						&NN::get_weight_at,	   							"Get connection weight for given connection in specified topology index" )
+    .method( "set_weight_at",     						&NN::set_weight_at,	   							"Set connection weight for given connection in specified topology index" )
+	.method( "set_misc_values_at",     					&NN::set_misc_values_at,	   					"Set misc registers of elements in specified topology index" )
+	.method( "set_output_at",     						&NN::set_output_at,	   							"Set output values in specified topology index" )
+	.method( "print",     								&NN::print,         							"Print internal NN state" )
+    .method( "outline",     							&NN::outline,         							"Outline of the NN topology" )
 ;
 }
 
