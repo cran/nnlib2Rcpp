@@ -121,10 +121,10 @@ return (mp_connection_set->destin_layer().PE(m_destin_pe));
 //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 void connection::encode()
- {error(NN_SYSTEM_ERR,"Default connection encode function called, should be overiden!");}
+ {error(NN_SYSTEM_ERR,"Default connection encode function called, should be overridden!");}
 
 void connection::recall()
-{error(NN_SYSTEM_ERR,"Default connection recall function called, should be overiden!");}
+{error(NN_SYSTEM_ERR,"Default connection recall function called, should be overridden!");}
 
 //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // input it :
@@ -163,7 +163,7 @@ void connection::recall()
 //*-----------------------------------------------------------------------*/
 // a generic connection that passes source output to destination input
 // multiplied by m_weight (which is 1 and is NOT adjusted during encode)
-// (note: m_weight may be adjusted externaly)
+// (note: m_weight may be adjusted externally)
 //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // passes source output to destination input (via its receive_input_value())
 
@@ -175,10 +175,10 @@ void weighted_pass_through_connection::encode()
 //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // passes source output to destination input (via its receive_input_value())
 
-void pass_through_connection::recall()
-	{
-	destin_pe().receive_input_value ( source_pe().output );
-	}
+void weighted_pass_through_connection::recall()
+{
+	destin_pe().receive_input_value ( m_weight * source_pe().output );
+}
 
 //*-----------------------------------------------------------------------*/
 // a generic connection that passes source output to destination input
@@ -194,11 +194,10 @@ void pass_through_connection::encode()
 //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // passes source output to destination input (via its receive_input_value())
 
-void weighted_pass_through_connection::recall()
+void pass_through_connection::recall()
 {
-	destin_pe().receive_input_value ( m_weight * source_pe().output );
+	destin_pe().receive_input_value ( source_pe().output );
 }
-
 
 //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 

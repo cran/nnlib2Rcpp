@@ -4,6 +4,14 @@
 //		nnlib2_dllist.h		 							Version 0.2
 //		-----------------------------------------------------------
 //		custom double linked list functionality.
+//      Warning!:
+//		   very limited functionality, a single iterator (mp_current)
+//         is used for each instance of such list. Only one loop that
+//		   uses current() or may change mp_current (using goto_first,
+//		   goto_next etc.) should be traversing each instance of such
+//		   list. No other such nested loop should be accessing it
+//		   before the first one is completed.
+//		   In such cases the [] operator may be use to access the list.
 //		-----------------------------------------------------------
 
 #ifndef NN_DLLIST_H
@@ -13,7 +21,7 @@
 #include "nnlib2_string.h"
 #include "nnlib2_error.h"
 
-#define DLLIST_EXTRA_INTEGRITY_CHECKS
+// #define DLLIST_EXTRA_INTEGRITY_CHECKS
 
 namespace nnlib2 {
 
@@ -27,7 +35,7 @@ class dllist : public error_flag_client
 
  T_wrapper PTR	mp_first;
  T_wrapper PTR	mp_last;
- T_wrapper PTR	mp_current;
+ T_wrapper PTR	mp_current;					// warning: a single internal iterator for each instance of a list. use with care!
  int			m_number_of_items;
  T				m_junk;
 
@@ -35,6 +43,7 @@ class dllist : public error_flag_client
 
  dllist();
  dllist(int number_of_items);
+ dllist(const dllist<T> REF list);
  ~dllist();
  bool goto_first ();						// move mp_current to first item, false if list is empty
  bool goto_last ();							// move mp_current to last item, false if list is empty
@@ -47,7 +56,7 @@ class dllist : public error_flag_client
  T REF first();								// moves mp_current at first, then return item pointed by mp_current
  T REF next();								// moves mp_current to its next, then return item pointed by mp_current. Invalid data if past end.
  T REF last();								// moves mp_current at last,  then return item pointed by mp_current
- T REF current ();							// returns item pointed by mp_current
+ T REF current();							// returns item pointed by mp_current
  bool append();
  virtual bool append(const T REF item);
  virtual bool insert(int at_index, const T REF item);
@@ -60,7 +69,8 @@ class dllist : public error_flag_client
  bool is_empty();
  bool contains (const T REF item);
  bool find (const T REF item);				// same as 'contains' but moves mp_current to target.
- T REF operator [] (int i);					// returns item at i. also changes mp_current to that item.
+ T REF operator [] (int i);					// returns item at i. does NOT change mp_current to that item.
+ bool append_from(const dllist<T> REF list);
  void from_stream (std::istream REF s);
  void to_stream   (std::ostream REF s);
  friend std::istream REF operator >> ( std::istream REF is, dllist REF it ) {it.from_stream(is);return is;};
@@ -88,6 +98,20 @@ class dllist : public error_flag_client
 
   for (int i = 0; (no_error() AND (i<number_of_items)); i++) append();
   }
+
+
+ //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+ template <class T>
+ dllist<T>::dllist(const dllist<T> REF list)
+ {
+ 	mp_first=mp_last=mp_current=NULL;
+ 	m_number_of_items = 0;
+ 	set_error_flag(list.mp_error_flag);
+
+ 	if(!no_error()) return;
+ 	append_from(list);
+ }
 
 //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -177,7 +201,6 @@ class dllist : public error_flag_client
  template <class T>
  bool dllist<T>::check()
   {
-
   #ifdef DLLIST_EXTRA_INTEGRITY_CHECKS
 
   bool ok = true;
@@ -228,7 +251,7 @@ class dllist : public error_flag_client
 //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
  template <class T>
- T REF dllist<T>::current ()
+ T REF dllist<T>::current()
   {
   if(mp_current EQL NULL)
    {
@@ -240,6 +263,7 @@ class dllist : public error_flag_client
   }
 
 //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// appends an item and changes mp_current to it.
 
  template <class T>
  bool dllist<T>::append()
@@ -276,6 +300,7 @@ class dllist : public error_flag_client
   }
 
 //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// appends an item and changes mp_current to it.
 
  template <class T>
  bool dllist<T>::append(const T REF item)
@@ -353,12 +378,9 @@ class dllist : public error_flag_client
  template <class T>
  bool dllist<T>::reset()
   {
-  unsigned c = 0;
-
   while(goto_last())
    {
    remove_last();
-   c++;
    }
 
   check();
@@ -370,6 +392,7 @@ class dllist : public error_flag_client
   }
 
 //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// removes last item (also changes mp_current)
 
  template <class T>
  bool dllist<T>::remove_last()
@@ -449,6 +472,7 @@ class dllist : public error_flag_client
  }
 
  //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+ // also changes mp_current.
 
  template <class T>
  T REF dllist<T>::first()
@@ -463,6 +487,7 @@ class dllist : public error_flag_client
   }
 
 //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// also changes mp_current.
 
  template <class T>
  T REF dllist<T>::last()
@@ -477,6 +502,7 @@ class dllist : public error_flag_client
   }
 
  //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+ // changes mp_current.
 
  template <class T>
  T REF dllist<T>::next()
@@ -550,7 +576,7 @@ class dllist : public error_flag_client
   }
 
 //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-// move mp_current to  specified item
+// move mp_current to specified item
 
 template <class T>
 bool dllist<T>::goto_item(int i)
@@ -580,12 +606,61 @@ bool dllist<T>::goto_item(int i)
 
 //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
+template <class T>
+bool dllist<T>::append_from(const dllist<T> REF list)
+{
+	if(!no_error()) return false;
+
+	T_wrapper PTR mp_item_to_copy;
+
+	mp_item_to_copy = list.mp_first;
+
+	while(mp_item_to_copy!=NULL)
+	{
+		if(append(mp_item_to_copy->item))
+			mp_item_to_copy=mp_item_to_copy->next;
+		else
+			mp_item_to_copy = NULL;
+	}
+	return(no_error());
+}
+
+//- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// old version, changes mp_current.
+
+ // template <class T>
+ // T REF dllist<T>::operator [] (int i)
+ //  {
+ //  if(NOT goto_item(i)) return m_junk;
+ //  return current();
+ //  }
+
+ //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+ // newer version, does NOT change mp_current. Use it to access elements
+ // without disturbing other loops that may use mp_current, current,
+ // goto_first, goto_last, etc.
+
  template <class T>
  T REF dllist<T>::operator [] (int i)
-  {
-  if(NOT goto_item(i)) return m_junk;
-  return current();
-  }
+ {
+ 	if((i<0) OR (i>=m_number_of_items) OR is_empty() OR (mp_first == NULL))
+ 	{
+ 		error(NN_SYSTEM_ERR,"dllist, empty list or attempt to access non-existant item");
+ 		return m_junk;
+ 	}
+
+ 	int c = 0;
+ 	T_wrapper PTR p = mp_first;
+ 	while (p != NULL)
+ 	{
+ 		if(c==i) return p->item;
+ 		p=p->next;
+ 		c++;
+ 	}
+
+ 	error(NN_SYSTEM_ERR,"dllist, attempt to access non-existant item");
+ 	return m_junk;
+ }
 
 //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // input it :

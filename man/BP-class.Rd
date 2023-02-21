@@ -35,7 +35,7 @@ This R module maintains an internal Back-Propagation (BP) multilayer perceptron 
 # create some data...
 iris_s                  <- as.matrix(scale(iris[1:4]))
 
-# use a randomply picked subset of (scaled) iris data for training
+# use a randomly picked subset of (scaled) iris data for training.
 training_cases          <- sample(1:nrow(iris_s), nrow(iris_s)/2,replace=FALSE)
 train_set               <- iris_s[training_cases,]
 train_class_ids         <- as.integer(iris$Species[training_cases])
@@ -43,14 +43,16 @@ train_num_cases         <- nrow(train_set)
 train_num_variables     <- ncol(train_set)
 train_num_classes       <- max(train_class_ids)
 
-# create output dataset to be used for training, Here we encode class as 0s and 1s
+# create output dataset to be used for training.
+# Here we encode class as 0s and 1s (one-hot encoding).
+
 train_set_data_out <- matrix(
           data = 0,
           nrow = train_num_cases,
           ncol = train_num_classes)
 
 # now for each case, assign a 1 to the column corresponding to its class, 0 otherwise
-# (there must be a better R way to do this)
+# (note: there are better R ways to do this in R)
 for(r in 1:train_num_cases) train_set_data_out[r,train_class_ids[r]]=1
 
 # done with data, let's use BP...
@@ -121,6 +123,15 @@ plot(iris_s, pch=bp_classification, main="Iris classified by a partialy trained 
     \item{\code{train_single (data_in, data_out)}:}{ Encode an input-output vector pair in the BP NN. Only performs a single training iteration (multiple may be required for proper encoding). Vector sizes should be compatible to the current NN (as resulted from the \code{encode} or \code{setup} methods). Returns error level indicator value.}
 
     \item{\code{train_multiple (data_in, data_out, training_epochs)}:}{ Encode multiple input-output vector pairs stored in corresponding datasets. Performs multiple iterations in epochs (see \code{encode}). Vector sizes should be compatible to the current NN (as resulted from the \code{encode} or \code{setup} methods). Returns error level indicator value.}
+
+
+    \item{\code{set_error_level(error_type, acceptable_error_level)}:}{ Set options that stop training when an acceptable error level has been reached (when a subsequent \code{encode} or \code{train_multiple} is performed). Parameters are:
+    \itemize{
+  \item{\code{error_type}}{: string, error type to display and use to stop training (must be 'MSE' or 'MAE').}
+  \item{\code{acceptable_error_level}}{: training stops when error is below this level.}
+    }
+    }
+
 
     \item{\code{print()}:}{ print NN structure. }
 
