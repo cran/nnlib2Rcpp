@@ -2,6 +2,8 @@
 #define NNLIB2_ADDITIONAL_PARTS_H
 
 #include "nn.h"
+#include "connection_matrix.h"
+
 using namespace nnlib2;
 
 #include "additional_parts_other.h"
@@ -35,13 +37,40 @@ public:
 	example_connection_set_2(string name) : Connection_Set(name) {};
 };
 
+//--------------------------------------------------------------------------------------------
+// minimal examples of matrix based (derived from generic_connection_matrix) definitions:
+//--------------------------------------------------------------------------------------------
+
+class example_connection_matrix: public generic_connection_matrix
+{
+public:
+
+	example_connection_matrix(string name):generic_connection_matrix(name,true){};
+
+	void encode () {};           // Just an example, does nothing
+	void recall () {};           // Just an example, does nothing
+};
+
+//------------------------------------------------------------------------------
+#ifdef NNLIB2_FOR_RCPP			// this part is currently used only in nnlib2Rcpp
 //------------------------------------------------------------------------------
 // register new layer classes here:
 // given the name, it should return a pointer to a newly created layer
 //------------------------------------------------------------------------------
 
-layer PTR generate_custom_layer(string name, int size, DATA optional_parameter=DATA_MIN)
+layer PTR generate_custom_layer(List parameters)
 {
+	// extract incoming parameters from list:
+
+	string name = parameters["name"];
+	int size	= parameters["size"];
+	DATA optional_parameter = DATA_MIN;
+
+	if(parameters.containsElementNamed("optional_parameter"))
+		optional_parameter = parameters["optional_parameter"];
+
+	// create the new layer:
+
 	if(name == "JustAdd10")         return new JustAdd10_layer (name,size);
 	if(name == "perceptron")        return new perceptron_layer(name,size);
 	if(name == "MEX")				return new MEX_layer(name, size);
@@ -88,8 +117,17 @@ layer PTR generate_custom_layer(string name, int size, DATA optional_parameter=D
 // given the name, it should return a pointer to a newly created connection_set
 //------------------------------------------------------------------------------
 
-connection_set PTR generate_custom_connection_set(string name, DATA optional_parameter=DATA_MIN)
+connection_set PTR generate_custom_connection_set(List parameters)
 {
+	string name = parameters["name"];
+
+	DATA optional_parameter = DATA_MIN;
+
+	if(parameters.containsElementNamed("optional_parameter"))
+		optional_parameter = parameters["optional_parameter"];
+
+	// examples of adding new connection set types:
+
 	if(name == "perceptron")                return new perceptron_connection_set(name);
 	if(name == "MEX")						return new MEX_connection_set(name);
 
@@ -97,9 +135,13 @@ connection_set PTR generate_custom_connection_set(string name, DATA optional_par
 	if(name == "example_connection_set_1")  return new example_connection_set_1(name);
 	if(name == "example_connection_set_2")  return new example_connection_set_2(name);
 
+	if(name == "example_connection_matrix") return new example_connection_matrix(name);
+
 	return NULL;
 }
 
+//------------------------------------------------------------------------------
+#endif // NNLIB2_FOR_RCPP		// end of part currently used only in nnlib2Rcpp
 //------------------------------------------------------------------------------
 
 #endif // NNLIB2_ADDITIONAL_PARTS_H
