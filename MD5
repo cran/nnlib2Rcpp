@@ -1,13 +1,13 @@
-d6a74825cccd12b9081f307dde29bc91 *DESCRIPTION
+b6547ad92039c15b22c3fc52da0da594 *DESCRIPTION
 c559c76ca8cdbeb82b81f03beede5d2f *LICENSE
 e591776594942d64eaa1485f09c69ced *NAMESPACE
 095191d89075bb357c2b55765d0a3b67 *R/NNClasses.R
 631bc653082d0794135cb12fbd618f72 *R/RcppExports.R
-cdbdb705c017565f8d24cdc91a0e6ec8 *build/partial.rdb
-9c6e1f02ede650f2d4109b94086c8886 *build/vignette.rds
+2836b2c5db38c9819380bd093383d89d *build/partial.rdb
+f9ec09317c5f4302acd4b0fcf704589f *build/vignette.rds
 b18f1d6fca4611771a65e05cffa33e55 *inst/CITATION
 3905b8469fc33c6fde470e301b469752 *inst/doc/manual.ltx
-23c712c1e9aa2648718bf2363c163308 *inst/doc/manual.pdf
+630941726c5c5a86043324e5ad252555 *inst/doc/manual.pdf
 b7b22f90da13a9a903750c4a423b4df8 *man/Autoencoder.Rd
 28ed4e79c40f74a564d0468f309f6440 *man/BP-class.Rd
 2ed8d108c5976fd71b9c159fca96eb30 *man/LVQs-class.Rd
@@ -16,7 +16,7 @@ e847a35176e7ceff887ae9f3692830d3 *man/LVQu.Rd
 0d6b104f8e4c6bded5c35b6641cdba6a *man/NN-R-components.Rd
 5da4e85ff503d37cce19b10843bbdbd3 *man/NN-class.Rd
 1fe06d5d69f9a201a622c00d2705b1d9 *man/NN-components.Rd
-94b1c490234b962d105f527beecd4687 *man/nnlib2Rcpp.Rd
+85a2a9a7634bda74a4f785481c07f332 *man/nnlib2Rcpp.Rd
 26457b830751d73527b70cabcdcf450b *src/RcppExports.cpp
 edba00bae93d2fc1c79ea5da4b494f35 *src/Rcpp_Autoencoder.cpp
 a62d9c3ab386fe557c1ae177ab5d7417 *src/Rcpp_BP_supervised_module.cpp
