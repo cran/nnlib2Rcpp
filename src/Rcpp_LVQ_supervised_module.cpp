@@ -40,35 +40,113 @@ public:
   }
 
   // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  // recommended cluster ids should be in 0 to n range.
+  // set number of output PEs (nodes) per class
+
+  int set_number_of_nodes_per_class(int n)
+  {
+  	if(lvq.is_ready())
+  	if(lvq.get_number_of_output_nodes_per_class()!=n)
+  	{
+  		error(NN_INTEGR_ERR,"LVQ is already set up. Define the number of nodes per class before setup or encode");
+  		return lvq.get_number_of_output_nodes_per_class();
+  	}
+  	TEXTOUT << "LVQ will use " << n << " output PE(s) per class when encoding or recalling data.\n";
+    lvq.set_number_of_output_nodes_per_class(n);
+    return lvq.get_number_of_output_nodes_per_class();
+  }
+
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  // set number of output PEs (nodes) per class
+
+  int get_number_of_nodes_per_class()
+  {
+  	return lvq.get_number_of_output_nodes_per_class();
+  }
+
+ // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+ // set number of output PEs (nodes) per class
+
+ bool enable_punishment()
+	{
+		TEXTOUT << "LVQ will notify winner nodes with incorrect classification when encoding data.\n";
+		lvq.punish_enable(TRUE);
+		return lvq.punish_enabled();
+	}
+
+ bool disable_punishment()
+	{
+		TEXTOUT << "LVQ will NOT notify winner nodes with incorrect classification when encoding data.\n";
+		lvq.punish_enable(FALSE);
+		return lvq.punish_enabled();
+	}
+
+
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  // Setup an lvq for future use
+
+  bool setup(int input_length, int number_of_classes)
+  {
+  	if(!lvq.setup(input_length,number_of_classes))
+  	{
+  		error(NN_INTEGR_ERR,"Cannot setup LVQ NN");
+  		lvq.reset();
+  		return false;
+  	}
+  	return lvq.is_ready();
+  }
+
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  // recommended cluster ids should be in 0 to n-1 range (n the number of clusters)
 
   void encode(NumericMatrix data,IntegerVector desired_class_ids,int training_epochs)
   {
+  	if(training_epochs<0)
+  	{
+  		training_epochs = 0;
+  		warning("Number of epochs set to 0");
+  	}
+
+  	if(training_epochs>LVQ_MAXITERATION)
+  	{
+  		training_epochs = LVQ_MAXITERATION;
+  		warning("Number of epochs set to maximum allowed");
+
+  	}
+
     int min_class_id = min(desired_class_ids);
     int max_class_id = max(desired_class_ids);
     int input_data_dim = data.cols();
-    int output_dim = max_class_id+1;                      // assumes cluster indexing starts with 0
+    int output_dim = max_class_id+1;	// assumes cluster indexing starts with 0
 
     if((data.rows()<=0) OR
        (data.rows()!=desired_class_ids.size()))
     {
-      error(NN_DATAST_ERR,"Cannot setup LVQ for these datasets");
+      error(NN_DATAST_ERR,"Cannot encode data on LVQ using these datasets");
       return;
     }
 
     if((min_class_id<0) OR (min_class_id>max_class_id) OR (output_dim<1))
     {
-      error(NN_DATAST_ERR,"Cannot setup LVQ for these classes");
+      error(NN_DATAST_ERR,"Cannot encode data on LVQ using these classes");
       return;
     }
 
-    TEXTOUT << "Setting up LVQ for 0 to " << max_class_id << " ids (" << output_dim << " classes).\n";
 
-    if(!lvq.setup(input_data_dim,output_dim))
+    if(lvq.is_ready() &&
+       (lvq.input_length() == input_data_dim) &&
+       ((int)(lvq.output_length()/lvq.get_number_of_output_nodes_per_class()) == output_dim))
     {
-      error(NN_INTEGR_ERR,"Cannot setup LVQ NN");
-      lvq.reset();
-      return;
+     	TEXTOUT << "Encoding will continue using existing LVQ.\n";
+    }
+    else
+    {
+    	TEXTOUT << "Setting up LVQ for 0 to " << max_class_id << " ids (" << output_dim << " classes). \n";
+    	if(!lvq.setup(input_data_dim,output_dim))
+    	{
+    		error(NN_INTEGR_ERR,"Cannot setup LVQ NN");
+    		lvq.reset();
+    		return;
+    	}
     }
 
     if(!lvq.no_error()) return;
@@ -107,23 +185,15 @@ public:
       return returned_cluster_ids;
     }
 
-    int output_dim = lvq.output_dimension();
-    DATA * output_vector = new DATA [output_dim];
-
     for(int r=0;r<data_in.rows();r++)
     {
       NumericVector v(data_in( r , _ ));                              // my (lame?) way to interface with R. Remember, NumericMatrix stores data row-first, as R does.
       double * fpdata = REAL(v);                                      // my (lame?) way to interface with R, cont.)
 
-      lvq.recall(fpdata, data_in.cols(), output_vector, output_dim);
-
-      // find which element in the output vector has the smallest value and use it as the winner id.
-      returned_cluster_ids[r] = which_min(output_vector,output_dim);
+      returned_cluster_ids[r] = lvq.recall_class(fpdata, data_in.cols());
     }
 
-    delete [] output_vector;
-
-    TEXTOUT << "Lvq returned " << unique(returned_cluster_ids).length() << " clusters with ids: " << unique(returned_cluster_ids) << "\n";
+    TEXTOUT << "Lvq returned " << unique(returned_cluster_ids).length() << " classes with ids: " << unique(returned_cluster_ids) << "\n";
 
     return returned_cluster_ids;
     }
@@ -154,6 +224,98 @@ public:
   }
 
   // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  // Get weights (connection variable)
+
+  NumericVector get_weights()
+  {
+  	// using R numbering, 1st is input layer, 2nd connections, 3rd output layer:
+  	int pos = 2;
+
+	NumericVector data_out;
+
+	if(lvq.number_of_components_in_topology()!=3)
+		{
+		warning("The LVQ topology has not been defined yet.");
+		return data_out;
+		}
+
+  	component PTR pc;
+  	pc = lvq.component_from_topology_index(pos-1);
+  	if(pc==NULL) return data_out;
+  	if(pc->type()!=cmpnt_connection_set)
+  	{
+  		warning("Not a connection set.");
+  		return data_out;
+  	}
+
+  	int num_items = pc->size();
+  	if(num_items>0)
+  	{
+  		data_out= NumericVector(num_items);
+  		double * fpdata_out = REAL(data_out);                   // my (lame?) way to interface with R, cont.)
+  		if(NOT lvq.get_weights_at_component(pos-1,fpdata_out, num_items))
+  			warning("Cannot retreive weights from specified component");
+  	}
+
+  	return data_out;
+  }
+
+	// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+	// Set weight (connection variable) for connections in given connection set (R to Cpp index converted)
+
+	bool set_weights(NumericVector data_in)
+	{
+		if(lvq.number_of_components_in_topology()!=3)
+		{
+			warning("The LVQ topology has not been defined yet.");
+			return false;
+		}
+
+		// using R numbering, 1st is input layer, 2nd connections, 3rd output layer:
+		int pos = 2;
+
+		double * fpdata_in  = REAL(data_in);                    // my (lame?) way to interface with R, cont.)
+		return lvq.set_weights_at_component(pos-1,fpdata_in,data_in.length());
+	}
+
+	// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+	// Get weights (connection variable)
+
+	NumericVector get_number_of_rewards()
+	{
+	// using R numbering, 1st is input layer, 2nd connections, 3rd output layer:
+	int pos = 3;
+
+	NumericVector data_out;
+
+	if(lvq.number_of_components_in_topology()!=3)
+	{
+		warning("The LVQ topology has not been defined yet.");
+		return data_out;
+	}
+
+	component PTR pc;
+	pc = lvq.component_from_topology_index(pos-1);
+	if(pc==NULL) return data_out;
+	if(pc->type()!=cmpnt_layer)
+	{
+		warning("Not a layer.");
+		return data_out;
+	}
+
+	int num_items = pc->size();
+	if(num_items>0)
+	{
+		data_out= NumericVector(num_items);
+		double * fpdata_out = REAL(data_out);                   // my (lame?) way to interface with R, cont.)
+		if(NOT lvq.get_misc_at_component(pos-1,fpdata_out, num_items))
+			warning("Cannot retreive misc values from specified component");
+	}
+
+	return data_out;
+	}
+
+  // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
   void print()
   {
@@ -180,12 +342,20 @@ RCPP_MODULE(class_LVQs) {
   class_<LVQs>( "LVQs" )
   .constructor()
   //.constructor<NumericMatrix,IntegerVector,int>()
-  .method( "encode",    &LVQs::encode,        "Encode input and output (classification) for a dataset using LVQ NN" )
-  .method( "recall",    &LVQs::recall,        "Get output (classification) for a dataset using LVQ NN" )
-  .method( "print",     &LVQs::print,         "Print LVQ NN details" )
-  .method( "show",      &LVQs::show,          "Print LVQ NN details" )
-  .method( "load",      &LVQs::load_from_file,"Load LVQ" )
-  .method( "save",      &LVQs::save_to_file,  "Save LVQ" )
+  .method( "encode",    						&LVQs::encode,							"Encode input and output (classification) for a dataset using LVQ NN" )
+  .method( "recall",    						&LVQs::recall,							"Get output (classification) for a dataset using LVQ NN" )
+  .method( "print",     						&LVQs::print,							"Print LVQ NN details" )
+  .method( "show",      						&LVQs::show,							"Print LVQ NN details" )
+  .method( "load",  						 	&LVQs::load_from_file,					"Load LVQ" )
+  .method( "save",      						&LVQs::save_to_file,					"Save LVQ" )
+  .method( "get_weights",						&LVQs::get_weights,						"Get current weight values" )
+  .method( "set_weights",						&LVQs::set_weights,						"Set current weight values" )
+  .method( "set_number_of_nodes_per_class",		&LVQs::set_number_of_nodes_per_class,	"Set number of output PEs to be used per class" )
+  .method( "get_number_of_nodes_per_class",		&LVQs::get_number_of_nodes_per_class,	"Get number of output PEs to be used per class" )
+  .method( "get_number_of_rewards",				&LVQs::get_number_of_rewards,			"Get number of times each output PE was positively reinforced during encoding" )
+  .method( "enable_punishment",					&LVQs::enable_punishment,				"During encoding incorrect winner nodes will be notified" )
+  .method( "disable_punishment",				&LVQs::disable_punishment,				"During encoding incorrect winner nodes will not be notified" )
+  .method( "setup",								&LVQs::setup,							"Setup an untrained supervised LVQ for given input data vector dimensions and number of classes" )
   ;
 }
 
