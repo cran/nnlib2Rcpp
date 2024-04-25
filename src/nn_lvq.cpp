@@ -142,6 +142,11 @@ lvq_connection_set::lvq_connection_set()
 :generic_connection_set()
  {
  m_iteration=0;
+ m_min_weight_allowed = DATA_MIN;
+ m_max_weight_allowed = DATA_MAX;
+
+ m_reward_coefficient = +0.2;
+ m_punish_coefficient = -0.2;
  }
 
 //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -150,7 +155,7 @@ void lvq_connection_set::set_iteration_number(int iteration)
 	{
 	if(iteration<0)
 		{
-		warning("Attempted to set LVQ iteration number to negative value, setting iteration counter to 0");
+		warning("Attempted to set LVQ iteration number to negative value, setting iteration number to 0");
 		m_iteration=0;
 		return;
 		}
@@ -193,7 +198,9 @@ void lvq_connection_set::encode()
 	}
 
 //DATA a = 1/(DATA) iteration;							    // (SIMPSON 5-110)
-  DATA a = 0.2*(1.0-((DATA)m_iteration)/LVQ_MAXITERATION);	// (SIMPSON 5-111) we assume it means "epoch" here
+//DATA a = 0.2*(1.0-((DATA)m_iteration)/LVQ_MAXITERATION);	// (SIMPSON 5-111) we assume it means "epoch" here
+  DATA a = (1.0-((DATA)m_iteration)/LVQ_MAXITERATION);
+
 
   layer REF destin = destin_layer();
 
@@ -206,16 +213,22 @@ void lvq_connection_set::encode()
    if(destin_pe.bias == LVQ_REWARD_PE) 						// if destination PE is activated...
 	{
     DATA d = c.misc;										// get difference, it was already computed during recall (see below)...
-    DATA dw = a*d ;
+    DATA dw = m_reward_coefficient * a * d ;
     c.weight() += dw;										// adjust weight (SIMPSON 5-109)
     }
 
-    if(destin_pe.bias == LVQ_PUNISH_PE)						// if destination PE is activated but is to be punished (supervised mode)...
+   if(destin_pe.bias == LVQ_PUNISH_PE)						// if destination PE is activated but is to be punished (supervised mode)...
  	{
     DATA d = c.misc;										// get difference, it was already computed during recall (see below)...
-    DATA dw = -a*d ;
+    DATA dw = m_punish_coefficient * a * d ;
     c.weight() += dw;										// adjust weight (SIMPSON 5-113)
     }
+
+   if(c.weight()<m_min_weight_allowed)
+   	c.weight()=m_min_weight_allowed;
+
+   if(c.weight()>m_max_weight_allowed)
+   	c.weight()=m_max_weight_allowed;
    }
   while(connections.goto_next());
   }
@@ -249,6 +262,35 @@ void lvq_connection_set::recall()
    }
   while(connections.goto_next());
   }
+
+//- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// helper functions for experimentation with this connection set:
+
+void lvq_connection_set::set_weight_limits(DATA min, DATA max)
+	{
+	m_min_weight_allowed = min;
+	m_max_weight_allowed = max;
+	}
+
+DATA lvq_connection_set::get_min_weight_allowed()
+	{ return m_min_weight_allowed; }
+
+DATA lvq_connection_set::get_max_weight_allowed()
+	{ return m_max_weight_allowed; }
+
+void lvq_connection_set::set_encoding_coefficients(DATA reward, DATA punish)
+{
+	if(reward<=0) warning("Setting negative or zero reward coefficient (is usualy defined to be positive)");
+	m_reward_coefficient = reward;
+	if(punish> 0) warning("Setting positive punishment coefficient (is usualy defined to be negative or zero)");
+	m_punish_coefficient = punish;
+}
+
+DATA lvq_connection_set::get_reward_coefficient()
+	{ return m_reward_coefficient; }
+
+DATA lvq_connection_set::get_punish_coefficient()
+	{ return m_punish_coefficient; }
 
 /*-----------------------------------------------------------------------*/
 /* Base class for Kohonen - inspired ANS (currently LVQ or SOM)			 */
@@ -385,7 +427,6 @@ void kohonen_nn::from_stream ( std::istream REF s )
 
 lvq_nn::lvq_nn()
  {
- m_number_of_output_nodes_per_class = 0;
  set_number_of_output_nodes_per_class(1);
  punish_enable(TRUE);
  }
@@ -394,7 +435,6 @@ lvq_nn::lvq_nn()
 
 lvq_nn::lvq_nn(int number_of_output_nodes_per_class, bool allow_punish)
  {
- m_number_of_output_nodes_per_class = 0;
  set_number_of_output_nodes_per_class(number_of_output_nodes_per_class);
  punish_enable(allow_punish);
  }
@@ -449,10 +489,49 @@ bool lvq_nn::setup(int input_dimension,
 							input_dimension,
 							number_of_classes * m_number_of_output_nodes_per_class,
 							1,
-							initial_cluster_centers_matrix
-							);
-
+							initial_cluster_centers_matrix);
  }
+
+//- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+bool lvq_nn::set_weight_limits(DATA min, DATA max)
+{
+	if(is_ready())
+		{
+		LVQ_CONNECTIONS.set_weight_limits(min,max);
+		return true;
+		}
+	warning("LVQ is not set up, cannot set weight limits");
+	return false;
+}
+
+//- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+bool lvq_nn::set_encoding_coefficients(DATA reward, DATA punish)
+{
+	if(is_ready())
+		{
+		LVQ_CONNECTIONS.set_encoding_coefficients(reward, punish);
+		return true;
+		}
+	warning("LVQ is not set up, cannot set encoding coefficients");
+	return false;
+}
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+DATA lvq_nn::get_reward_coefficient()
+{
+	if(is_ready()) return LVQ_CONNECTIONS.get_reward_coefficient();
+	warning("LVQ not set up, returning 0 as reward coefficient");
+	return 0;
+}
+
+DATA lvq_nn::get_punish_coefficient()
+{
+	if(is_ready()) return LVQ_CONNECTIONS.get_punish_coefficient();
+	warning("LVQ not set up, returning 0 as punish coefficient");
+	return 0;
+}
 
 //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
@@ -481,26 +560,36 @@ DATA lvq_nn::encode_s(DATA PTR input, int input_dim, DATA PTR desired_output, in
  }
 
 //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// Note: 0 indicates no error (success), DATA_MAX failure
 
 DATA lvq_nn::encode_s(	DATA PTR input,
 						int input_dim,
 						int desired_class,
 						int iteration)
  {
+ if(!is_ready())
+  {	warning("Cannot train, LVQ is not set up"); return DATA_MAX; }
 
- if(is_ready())
-  {
-  // recall the data vector:
+ int max_supported_class_id =
+		(int)(OUTPUT_LAYER.length() / m_number_of_output_nodes_per_class) - 1;
 
-  INPUT_LAYER.input_data_from_vector(input,input_dim);
-  recall();
+ if(desired_class<0)
+ 	{error(NN_DATAST_ERR, "Negative class ids are not allowed"); return DATA_MAX;}
 
-  // find which output node is best for input vector (has smallest distance)
+ if(desired_class>max_supported_class_id)
+ 	{error(NN_DATAST_ERR, "Class id too large for current LVQ configuration"); return DATA_MAX;}
 
-  int current_winner_pe	  = 0;
-  DATA current_win_output = OUTPUT_LAYER.PE(0).output;	// this should be the distance, see lvq_output_layer::recall.
+ // recall the data vector:
 
-  for(int i=0;i<output_dimension();i++)
+ if(!INPUT_LAYER.input_data_from_vector(input,input_dim)) return DATA_MAX;
+ recall();
+
+ // find which output node is best for input vector (has smallest distance)
+
+ int current_winner_pe	  = 0;
+ DATA current_win_output = OUTPUT_LAYER.PE(0).output;	// this should be the distance, see lvq_output_layer::recall.
+
+ for(int i=0;i<output_dimension();i++)
    {
    OUTPUT_LAYER.PE(i).bias = LVQ_DEACTI_PE;
    DATA d = OUTPUT_LAYER.PE(i).output;					// this should be the distance, see lvq_output_layer::recall.
@@ -511,24 +600,23 @@ DATA lvq_nn::encode_s(	DATA PTR input,
     }
    }
 
-  // translate winning PE number to class id (numbers start at 0):
+ // translate winning PE number to class id (numbers start at 0):
 
-  int returned_class =
+ int returned_class =
   	(int)(current_winner_pe / m_number_of_output_nodes_per_class);
 
-  // reward if winning PE is one of those assigned to desired class, else punish.
+ // reward if winning PE is one of those assigned to desired class, else punish.
 
-  if(returned_class==desired_class)					// this is based on SIMPSON equation (5-113)
+ if(returned_class==desired_class)					// this is based on SIMPSON equation (5-113)
     {
 	OUTPUT_LAYER.PE(current_winner_pe).bias = LVQ_REWARD_PE;
   	OUTPUT_LAYER.PE(current_winner_pe).misc = OUTPUT_LAYER.PE(current_winner_pe).misc + 1;  // just a counter of rewards given to the PE (for inspection purposes, not affecting results)
     }
-  else
-	if(m_punish_enabled)
+ else
+  if(m_punish_enabled)
 		OUTPUT_LAYER.PE(current_winner_pe).bias = LVQ_PUNISH_PE;
 
-  if(no_error()) LVQ_CONNECTIONS.encode(iteration);
-  }
+ if(no_error()) LVQ_CONNECTIONS.encode(iteration);
 
  return 0;
  }
@@ -536,7 +624,8 @@ DATA lvq_nn::encode_s(	DATA PTR input,
 //- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 int lvq_nn::recall_class( DATA PTR input,
-                    	  int input_dim )
+                    	  int input_dim,
+                    	  int min_rewards)
 
 {
 	int returned_class = -1;
@@ -548,20 +637,45 @@ int lvq_nn::recall_class( DATA PTR input,
 		INPUT_LAYER.input_data_from_vector(input,input_dim);
 		recall();
 
-		// find which output node is best for input vector (has smallest distance)
+		// find which output node wins, i.e is has smallest distance to input vector
 
-		int current_winner_pe	  = 0;
-		DATA current_win_output = OUTPUT_LAYER.PE(0).output;	// this should be the distance, see lvq_output_layer::recall.
+		int current_winner_pe			= 0;
+
+		// find at least one output node with requested number of rewards.
+
+		if(min_rewards>0)
+		{
+		bool found_rewarded = false;
+		for(int i=0;i<output_dimension() AND NOT found_rewarded;i++)
+			{
+			if(OUTPUT_LAYER.PE(i).misc >= min_rewards)					// misc in output PEs is just a counter of rewards given to the PE
+				{
+				current_winner_pe = i;
+				found_rewarded = true;
+				}
+			}
+		if(NOT found_rewarded)
+			{
+			error(NN_METHOD_ERR,"No output node has requested number of rewards");
+			return(-1);
+			}
+		}
+
+		DATA current_win_output = OUTPUT_LAYER.PE(current_winner_pe).output;	// this should be the distance, see lvq_output_layer::recall.
 
 		for(int i=0;i<output_dimension();i++)
 		{
-			OUTPUT_LAYER.PE(i).bias = LVQ_DEACTI_PE;
-			DATA d = OUTPUT_LAYER.PE(i).output;					// this should be the distance, see lvq_output_layer::recall.
-			if(d<=current_win_output)
-			{
-				current_win_output = d;
-				current_winner_pe  = i;
-			}
+			OUTPUT_LAYER.PE(i).bias = LVQ_DEACTI_PE;					// (is this really necessary?) deactivate all
+
+			if(OUTPUT_LAYER.PE(i).misc >= min_rewards)					// misc in output PEs is just a counter of rewards given to the PE
+				{
+				DATA d = OUTPUT_LAYER.PE(i).output;						// this should be the distance, see lvq_output_layer::recall.
+				if(d<=current_win_output)
+					{
+					current_win_output = d;
+					current_winner_pe  = i;
+					}
+				}
 		}
 
 		// translate winning PE number to class id (numbers start at 0):
