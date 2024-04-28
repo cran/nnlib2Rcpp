@@ -1,4 +1,4 @@
-c86ead289e5768ec2f3002b6578f337b *DESCRIPTION
+9905a8396c73de1446ad0ea3dd9c481d *DESCRIPTION
 81a48f57570dec7389ed960aaeba4280 *LICENSE
 9b1c9f83b8ec99b7bacc71c4cf3bdfd2 *NAMESPACE
 095191d89075bb357c2b55765d0a3b67 *R/NNClasses.R
@@ -7,7 +7,7 @@ c86ead289e5768ec2f3002b6578f337b *DESCRIPTION
 fd565bace1a07e59811fc671fdfd1989 *build/vignette.rds
 b18f1d6fca4611771a65e05cffa33e55 *inst/CITATION
 ad1452882b63393af6f1e5a922316363 *inst/doc/intro.ltx
-56ccca80e07d5aa9d876884396314964 *inst/doc/intro.pdf
+3dd2f540afed4e7c3326b3930a984d09 *inst/doc/intro.pdf
 927fa4bc39c584d6c17b0dfa49ef2a14 *man/Autoencoder.Rd
 8b08cf15675bb7200e82dfeb37745137 *man/BP-class.Rd
 c7dfc133bb3b259271d0a02c768c54f3 *man/LVQs-class.Rd
@@ -46,7 +46,7 @@ b65583bdd6da5f8e07dc13b936f8b792 *src/connection_matrix.h
 311d71d27e67989a131c57c9a93318cb *src/nn.h
 a417ae7c2fc1b1789cac6e393b52593f *src/nn_bp.cpp
 7296c1733f5a828f3e8afed0664c9452 *src/nn_bp.h
-0954c1a4f28841f0b7e6c795ce732f56 *src/nn_lvq.cpp
+2c7dd87ced44158fb92044e50aedd3fe *src/nn_lvq.cpp
 3ef3a02eb4953934a2a21f8e64be2f01 *src/nn_lvq.h
 6c27f22fae11db31fe90c77ec7512b69 *src/nn_mam.h
 445a1f135410c314aaf51d538224ca34 *src/nnlib2.h
